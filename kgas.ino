@@ -16,6 +16,8 @@
 #include <BLEServer.h>
 #include <BLE2902.h>
 
+#include "EEPROM.h"
+
 BLEServer *pServer = NULL;
 BLECharacteristic * pTxCharacteristic;
 bool deviceConnected = false;
@@ -28,8 +30,17 @@ bool oldDeviceConnected = false;
 const int LOADCELL_DOUT_PIN = 12;
 const int LOADCELL_SCK_PIN = 27;
 
-char ssid[32] = "ro.d";
-char password[32] = "fo45#cuu";
+// metrics to store in EEPROM
+char ssid[32] = "";
+char password[32] = "";
+
+#define EEPROM_MAX_USAGE 64
+#define SSID_START 0
+#define SSID_END 32
+#define PWD_START 33
+#define PWD_END 64
+
+const char device_id[100] = "MA-404-00000";
 
 HX711 scale;
 
@@ -78,6 +89,105 @@ bool connectToWifi() {
   if (WiFi.status() == WL_CONNECTED) {
     return true;
   }
+  return false;
+}
+
+bool storeCreds() {  
+  // write the ssid to EEPROM byte-by-byte
+  for (int i = SSID_START, j = 0; i < SSID_END; i++, j++) {
+      EEPROM.write(i, ssid[j]);
+  }
+
+  // write the password to EEPROM byte-by-byte
+  for (int i = PWD_START, j = 0; i < PWD_END; i++, j++) {
+      EEPROM.write(i, password[j]);
+  }
+  
+  if(EEPROM.commit()) {
+    return true;
+  }
+
+  return false;
+}
+
+bool clearEEPROM() {
+  // set the EEPROM values to 0
+  for (int i = 0; i < EEPROM_MAX_USAGE; i++) {
+      EEPROM.write(i, 0);
+  }
+  
+  if(EEPROM.commit()) {
+    return true;
+  }
+
+  return false; 
+}
+
+void printFlashValues() {
+  Serial.println("Getting SSID and password from EEPROM");
+  
+  // get the SSID from EEPROM and print it
+  for (int i = SSID_START; i < SSID_END; i++) {
+      byte readValue = EEPROM.read(i);
+
+      if (readValue == 0) {
+          break;
+      }
+
+      char readValueChar = char(readValue);
+      Serial.print(readValueChar);
+    }
+
+  // get the password from EEPROM and print it
+  for (int i = PWD_START; i < PWD_END; i++) {
+      byte readValue = EEPROM.read(i);
+
+      if (readValue == 0) {
+          break;
+      }
+
+      char readValueChar = char(readValue);
+      Serial.print(readValueChar);
+    }
+}
+
+bool rememberAndConnect() {
+  // if first element is 0, then the EEPROM is empty
+  byte firstValue = EEPROM.read(0);
+  if (firstValue == 0) {
+    return false;
+  }
+  
+  // get the SSID from EEPROM and set the ssid variable
+  for (int i = SSID_START, j = 0; i < SSID_END; i++, j++) {
+      byte readValue = EEPROM.read(i);
+
+      if (readValue == 0) {
+          break;
+      }
+
+      char readValueChar = char(readValue);
+      ssid[j] = readValueChar;
+      Serial.print(readValueChar);
+    }
+
+  // get the password from EEPROM and set the password variable
+  for (int i = PWD_START, j = 0; i < PWD_END; i++, j++) {
+    byte readValue = EEPROM.read(i);
+
+    if (readValue == 0) {
+        break;
+    }
+
+    char readValueChar = char(readValue);
+    password[j] = readValueChar;
+    Serial.print(readValueChar);
+  }
+
+  if (connectToWifi()) {
+    return true;
+  }
+
   return false;
 }
 
@@ -178,6 +288,11 @@ class MyCallbacks: public BLECharacteristicCallbacks {
         
         uint8_t wcStatus[] = "N";
         if (connectToWifi()) {
+
+          // if wifi connection succeeds, store the ssid and password in EEPROM
+          storeCreds();
+          printFlashValues();
+          
           wcStatus[0] = 'Y';
         }
         
@@ -191,6 +306,13 @@ class MyCallbacks: public BLECharacteristicCallbacks {
 
 void setup() {
   Serial.begin(115200);
+
+  // EEPROM initialization
+  if (!EEPROM.begin(EEPROM_MAX_USAGE)) {
+      Serial.println("failed to init EEPROM");
+      Serial.println("Please connect to WiFi manually");
+      // delay(1000000);
+  }
 
   // load cell initialization
   scale.begin(LOADCELL_DOUT_PIN, LOADCELL_SCK_PIN);
@@ -210,7 +332,7 @@ void setup() {
 
   // BLE initialization
   // Create the BLE Device
-  BLEDevice::init("MA-404-00000");
+  BLEDevice::init(device_id);
 
   // Create the BLE Server
   pServer = BLEDevice::createServer();
@@ -244,6 +366,10 @@ void setup() {
   // set up WiFi configurations
   WiFi.mode(WIFI_STA);
   delay(100);
+
+  // check if credentials in EEPROM and connect
+  printFlashValues();
+  rememberAndConnect();
 
 }
 
@@ -291,7 +417,7 @@ void loop() {
     http.begin("http://genesisapp.ml/kgas/api/update/level/");
     http.addHeader("Content-Type", "application/x-www-form-urlencoded");
 
-    String requestData = "customerId=ROUNAK123&level=" + String(grams);
+    String requestData = "deviceId=" + String(device_id) + "&level=" + String(grams);
     Serial.println(requestData);
     int httpResponseCode = http.POST(requestData);
     Serial.println(httpResponseCode);
