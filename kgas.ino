@@ -417,7 +417,7 @@ void loop() {
     http.begin("http://genesisapp.ml/kgas/api/update/level/");
     http.addHeader("Content-Type", "application/x-www-form-urlencoded");
 
-    String requestData = "deviceId=" + String(device_id) + "&level=" + String(grams);
+    String requestData = "deviceId=" + String(device_id) + "&level=" + String(grams) + "&wifi=" + String(ssid);
     Serial.println(requestData);
     int httpResponseCode = http.POST(requestData);
     Serial.println(httpResponseCode);
