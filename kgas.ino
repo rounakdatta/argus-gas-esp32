@@ -375,6 +375,10 @@ void setup() {
 
 void loop() {
 
+  // check if credentials in EEPROM and connect
+  printFlashValues();
+  rememberAndConnect();
+
     // disconnecting
     if (!deviceConnected && oldDeviceConnected) {
         delay(500); // give the bluetooth stack the chance to get things ready
@@ -394,6 +398,11 @@ void loop() {
   units = scale.get_units(), 10;
 
   float grams = units*17.5;
+
+  if (grams < 0) {
+    grams = 0.00;
+  }
+  
   Serial.print(grams);
   Serial.print(" grams"); 
   Serial.print(" calibration_factor: ");
