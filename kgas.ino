@@ -375,10 +375,6 @@ void setup() {
 
 void loop() {
 
-  // check if credentials in EEPROM and connect
-  printFlashValues();
-  rememberAndConnect();
-
     // disconnecting
     if (!deviceConnected && oldDeviceConnected) {
         delay(500); // give the bluetooth stack the chance to get things ready
@@ -437,6 +433,10 @@ void loop() {
     } else {
       Serial.println("Error sending POST request");
     }
+  } else {
+    // check if credentials in EEPROM and connect
+    printFlashValues();
+    rememberAndConnect();    
   }
 
   // wait for 1 minute
